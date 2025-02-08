@@ -15,51 +15,73 @@
   <div id="results"></div>
 
   <script>
-    // When the search button is clicked, perform a search using the API.
-    document.getElementById('searchButton').addEventListener('click', function() {
+    document.getElementById('searchButton').addEventListener('click', async function() {
       const query = document.getElementById('searchInput').value.trim();
       if (!query) {
         alert('Please enter a company name.');
         return;
       }
-      
-      // Construct the API URL with the free text search parameter "navn"
-      const url = 'https://data.brreg.no/enhetsregisteret/api/enheter?navn=' + encodeURIComponent(query);
-      
-      // Fetch the data from the API.
-      fetch(url, {
-        // The Accept header selects the correct version (here version 2 in JSON HAL format)
-        headers: { 'Accept': 'application/vnd.brreg.enhetsregisteret.enhet.v2+json' }
-      })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error('Network response was not OK');
-        }
-        return response.json();
-      })
-      .then(data => {
+
+      const url = `https://data.brreg.no/enhetsregisteret/api/enheter?navn=${encodeURIComponent(query)}`;
+      try {
+        const response = await fetch(url, {
+          headers: { 'Accept': 'application/vnd.brreg.enhetsregisteret.enhet.v2+json' }
+        });
+        if (!response.ok) throw new Error('Network response was not OK');
+        const data = await response.json();
+
         const resultsDiv = document.getElementById('results');
-        resultsDiv.innerHTML = ''; // Clear any previous results
-        
-        // The API returns data in HAL format. The list of companies is in _embedded.enheter.
+        resultsDiv.innerHTML = '';
+
         if (data._embedded && data._embedded.enheter && data._embedded.enheter.length > 0) {
-          data._embedded.enheter.forEach(company => {
+          for (const company of data._embedded.enheter) {
             const companyDiv = document.createElement('div');
-            // Display basic information. Adjust the fields as needed.
             companyDiv.innerHTML = `<strong>${company.navn}</strong><br>
                                     Organization Number: ${company.organisasjonsnummer}<br>
                                     ${company.forretningsadresse ? 'Address: ' + company.forretningsadresse.adresse.join(', ') : ''}`;
+
             resultsDiv.appendChild(companyDiv);
-          });
+
+            // Fetch economic data for the company
+            const economicData = await fetchEconomicData(company.organisasjonsnummer);
+            if (economicData) {
+              const economicDiv = document.createElement('div');
+              economicDiv.innerHTML = `<strong>Latest Available Financials (${economicData.aar}):</strong><br>
+                                       Revenue: ${economicData.driftsinntekter.toLocaleString()} NOK<br>
+                                       Result: ${economicData.resultat.toLocaleString()} NOK`;
+              companyDiv.appendChild(economicDiv);
+            } else {
+              companyDiv.innerHTML += '<br>No financial data available.';
+            }
+          }
         } else {
           resultsDiv.innerHTML = '<p>No results found.</p>';
         }
-      })
-      .catch(error => {
+      } catch (error) {
         console.error('Error:', error);
         document.getElementById('results').innerText = 'An error occurred while fetching data.';
-      });
+      }
     });
+
+    async function fetchEconomicData(orgnr) {
+      const url = `https://data.brreg.no/regnskapsregisteret/regnskap/${orgnr}`;
+      try {
+        const response = await fetch(url);
+        if (!response.ok) return null;
+        const data = await response.json();
+
+        if (data.regnskapsår && data.resultatregnskap) {
+          return {
+            aar: data.regnskapsår,
+            driftsinntekter: data.resultatregnskap.sumDriftsinntekter || 0,
+            resultat: data.resultatregnskap.årsresultat || 0
+          };
+        }
+      } catch (error) {
+        console.error('Error fetching economic data:', error);
+      }
+      return null;
+    }
   </script>
 </body>
 </html>
