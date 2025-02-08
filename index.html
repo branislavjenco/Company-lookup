@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Company Search</title>
+  <style>
+    body { font-family: Arial, sans-serif; }
+    #results div { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <h1>Search for a Company</h1>
+  <input type="text" id="searchInput" placeholder="Enter company name" />
+  <button id="searchButton">Search</button>
+  <div id="results"></div>
+
+  <script>
+    // When the search button is clicked, perform a search using the API.
+    document.getElementById('searchButton').addEventListener('click', function() {
+      const query = document.getElementById('searchInput').value.trim();
+      if (!query) {
+        alert('Please enter a company name.');
+        return;
+      }
+      
+      // Construct the API URL with the free text search parameter "navn"
+      const url = 'https://data.brreg.no/enhetsregisteret/api/enheter?navn=' + encodeURIComponent(query);
+      
+      // Fetch the data from the API.
+      fetch(url, {
+        // The Accept header selects the correct version (here version 2 in JSON HAL format)
+        headers: { 'Accept': 'application/vnd.brreg.enhetsregisteret.enhet.v2+json' }
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Network response was not OK');
+        }
+        return response.json();
+      })
+      .then(data => {
+        const resultsDiv = document.getElementById('results');
+        resultsDiv.innerHTML = ''; // Clear any previous results
+        
+        // The API returns data in HAL format. The list of companies is in _embedded.enheter.
+        if (data._embedded && data._embedded.enheter && data._embedded.enheter.length > 0) {
+          data._embedded.enheter.forEach(company => {
+            const companyDiv = document.createElement('div');
+            // Display basic information. Adjust the fields as needed.
+            companyDiv.innerHTML = `<strong>${company.navn}</strong><br>
+                                    Organization Number: ${company.organisasjonsnummer}<br>
+                                    ${company.forretningsadresse ? 'Address: ' + company.forretningsadresse.adresse.join(', ') : ''}`;
+            resultsDiv.appendChild(companyDiv);
+          });
+        } else {
+          resultsDiv.innerHTML = '<p>No results found.</p>';
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        document.getElementById('results').innerText = 'An error occurred while fetching data.';
+      });
+    });
+  </script>
+</body>
+</html>
